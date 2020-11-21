@@ -21,7 +21,8 @@ float ZMax = 0;
 void setup() {
   jewel.begin();
   jewel.show();
-  //jewel.setBrightness(5);
+  //Max = 255
+  jewel.setBrightness(255);
 
   Serial.begin(115200);
   
@@ -128,9 +129,9 @@ void lightCompass(float currPixelHeading) {
   for(uint16_t j = 1; j<jewel.numPixels(); j++) {
     if( j == i ) {
       //North indicator Red
-      jewel.setPixelColor(j, jewel.Color(0, 55, 0));
+      jewel.setPixelColor(j, jewel.Color(0, 255, 0));
     } else if( j == k ) {
-      jewel.setPixelColor(k, jewel.Color(0, 0, 55));
+      jewel.setPixelColor(k, jewel.Color(0, 0, 255));
     } else {
       //Everything else off
       jewel.setPixelColor(j, jewel.Color(0, 0, 0));
