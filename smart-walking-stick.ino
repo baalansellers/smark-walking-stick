@@ -1,11 +1,66 @@
 #include <Adafruit_LSM303DLH_Mag.h>
-#include <Adafruit_LSM303_Accel.h>
+#include "Adafruit_LSM303_Accel.h"
 #include <Adafruit_Sensor.h>
 #include <Wire.h>
 #include <Adafruit_NeoPixel.h>
 
 #define PIXELPIN  3
-#define NUMPIXELS 10
+// 0: Center; 1-6: Ring
+#define NUMPIXELS 7
+
+/* Click Configurations for CLICK_CFG_A
+ * -----------------------------------------
+ * | -- | -- | ZD | ZS | YD | YS | XD | XS |
+ * -----------------------------------------
+ * ZD: Double click Z axis
+ * ZS: Single click Z axis
+ * YD: Double click Y axis
+ * YS: Single click Y axis
+ * XD: Double click X axis
+ * XS: Single click X axis
+ */
+#define  DOUBLE_Z   0b00100000
+#define  SINGLE_Z   0b00010000
+#define  DOUBLE_Y   0b00001000
+#define  SINGLE_Y   0b00000100
+#define  DOUBLE_X   0b00000010
+#define  SINGLE_X   0b00000001
+#define  DOUBLE_ALL 0b00101010
+#define  SINGLE_ALL 0b00010101
+
+/* Click Configurations for CLICK_SRC_A
+ * -------------------------------------------------------
+ * | -- | IA | DBCLICK | SCLICK | Sign |  Z  |  Y  |  X  |
+ * -------------------------------------------------------
+ * IA: Interrupt Active?
+ * DBCLICK: Double Click Enabled?
+ * SCLICK: Single Click Enabled?
+ * Sign: (default: 0) 0 = Positive detect, 1 = Negative detect
+ * Z: Z click detected?
+ * Y: Y click detected?
+ * X: X click detected?
+ */
+#define Z_DOUBLE_CLICK 0b01100100
+#define Y_DOUBLE_CLICK 0b01100010
+#define X_DOUBLE_CLICK 0b01100001
+
+enum functionTypes {
+  CALIBRATE,
+  COMPASS,
+  FLASHLIGHT_COOL,
+  FLASHLIGHT_WARM,
+  LIGHTNING_COOL,
+  LIGHTNING_WARM,
+  BREATH,
+  RAINBOW,
+  RAINBOW_BREATH,
+  LAST
+};
+
+enum lightTemp {
+  WARM,
+  COOL
+};
 
 Adafruit_LSM303DLH_Mag_Unified lsm = Adafruit_LSM303DLH_Mag_Unified(12345);
 Adafruit_LSM303_Accel_Unified accel = Adafruit_LSM303_Accel_Unified(54321);
@@ -17,6 +72,9 @@ float YMin = -98;
 float YMax = 0.64;
 float ZMin = -122.65;
 float ZMax = 0;
+
+bool TappedState = false;
+functionTypes FunctionState = FLASHLIGHT_WARM; // Initial Function
 
 void setup() {
   jewel.begin();
@@ -36,23 +94,78 @@ void setup() {
       ;
   }
 
-  accel.setRange(LSM303_RANGE_4G);
+  accel.setRange(LSM303_RANGE_8G);
   accel.setMode(LSM303_MODE_LOW_POWER);
+  accel.setTap(3, 20, 10, 20, 20, DOUBLE_Y);
 }
 
 void loop() {
-  sensors_event_t magEvent;
-  sensors_event_t accelEvent;
-  
-  accel.getEvent(&accelEvent);
+  tapDetect();
 
-  lsm.getEvent(&magEvent);
-  
-  setCompass(magEvent);
+  //sensors_event_t accelEvent;
+  //accel.getEvent(&accelEvent);
 
-  checkForStrike(accelEvent);
+  executeFunction();
 }
 
+void executeFunction() {
+  //Serial.print("Execute: ");
+  //Serial.println(FunctionState);
+  
+  switch (FunctionState) {
+    case CALIBRATE:
+      break;
+    case COMPASS:
+      sensors_event_t magEvent;
+      lsm.getEvent(&magEvent);
+      setCompass(magEvent);
+      break;
+    case FLASHLIGHT_COOL:
+      igniteFlashlight(COOL);
+      break;
+    case FLASHLIGHT_WARM:
+      igniteFlashlight(WARM);
+      break;
+    case LIGHTNING_COOL:
+      break;
+    case LIGHTNING_WARM:
+      break;
+    case BREATH:
+      break;
+    case RAINBOW:
+      break;
+    case RAINBOW_BREATH:
+      break;
+  }
+}
+
+void tapDetect() {
+  bool source = accel.getTapped() == Y_DOUBLE_CLICK;
+
+  if (TappedState != source && !TappedState) {
+    rotateFunction();
+  }
+
+  TappedState = source;
+}
+
+void rotateFunction() {
+  int currFunction = FunctionState;
+
+  currFunction++;
+  
+  if (currFunction == (int)LAST) {
+    currFunction = 1; //skip Calibrate as an option for now
+  }
+
+  FunctionState = (functionTypes)currFunction;
+  Serial.print("Rotate to: ");
+  Serial.println(FunctionState);
+}
+
+/*
+ * ANIMATIONS
+ */
 void animationAwake() {
   for(uint16_t i = 1; i<jewel.numPixels(); i++) {
     jewel.clear();
@@ -61,6 +174,31 @@ void animationAwake() {
     delay(100);
   }
 }
+
+/*
+ * FLASHLIGHTS
+ */
+void igniteFlashlight(lightTemp temp) {
+  //Serial.println("Flashlight");
+  switch (temp) {
+    case WARM:
+      for(uint16_t i = 0; i<jewel.numPixels(); i++) {
+        jewel.setPixelColor(i, jewel.Color(255, 255, 255, 255));
+      }
+      break;
+    case COOL:
+      for(uint16_t i = 0; i<jewel.numPixels(); i++) {
+        jewel.setPixelColor(i, jewel.Color(255, 255, 255));
+      }
+      break;
+  }
+  jewel.show();
+}
+ 
+
+/*
+ * COMPASS ROUTINES
+ */
 
 void setCompass(sensors_event_t magEvent) {
   float Pi = 3.14159;
@@ -151,24 +289,4 @@ float invertPixel(float currPixelHeading) {
   }
 
   return currPixelHeading;
-}
-
-void checkForStrike(sensors_event_t event) {
-  if(event.acceleration.y <= 2.00) {
-    for(int i = 0; i<5; i++) {
-      jewel.clear();
-      jewel.show();
-      delay(50);
-      jewel.setPixelColor(0, jewel.Color(0, 0, 255));
-      jewel.setPixelColor(1, jewel.Color(0, 0, 255));
-      jewel.setPixelColor(2, jewel.Color(0, 0, 255));
-      jewel.setPixelColor(3, jewel.Color(0, 0, 255));
-      jewel.setPixelColor(4, jewel.Color(0, 0, 255));
-      jewel.setPixelColor(5, jewel.Color(0, 0, 255));
-      jewel.setPixelColor(6, jewel.Color(0, 0, 255));
-      jewel.show();
-      delay(200);
-    }
-    jewel.clear();
-  }
 }
