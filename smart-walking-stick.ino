@@ -54,12 +54,19 @@ enum functionTypes {
   BREATH,
   RAINBOW,
   RAINBOW_BREATH,
+  OFF,
   LAST
 };
 
 enum lightTemp {
   WARM,
   COOL
+};
+
+enum rgbColor {
+  RED,
+  GREEN,
+  BLUE
 };
 
 Adafruit_LSM303DLH_Mag_Unified lsm = Adafruit_LSM303DLH_Mag_Unified(12345);
@@ -72,6 +79,13 @@ float YMin = -98;
 float YMax = 0.64;
 float ZMin = -122.65;
 float ZMax = 0;
+
+int CurrentGreen = 0;
+int CurrentRed = 0;
+int CurrentBlue = 0;
+int CurrentBreath = 0;
+int CurrentHue = 0;
+bool CycleUp = true;
 
 bool TappedState = false;
 functionTypes FunctionState = FLASHLIGHT_WARM; // Initial Function
@@ -127,26 +141,39 @@ void executeFunction() {
       igniteFlashlight(WARM);
       break;
     case LIGHTNING_COOL:
+      animateLightning();
       break;
     case LIGHTNING_WARM:
+      animateCracklingLightning();
       break;
     case BREATH:
+      animateBreath(BLUE);
       break;
     case RAINBOW:
+      cycleHue();
       break;
     case RAINBOW_BREATH:
+      animateRainbowLightning();
+      break;
+    case OFF:
+      jewel.clear();
+      jewel.show();
       break;
   }
 }
 
-void tapDetect() {
+bool tapDetect() {
   bool source = accel.getTapped() == Y_DOUBLE_CLICK;
+  bool tapped = false;
 
   if (TappedState != source && !TappedState) {
     rotateFunction();
+    tapped = true;
   }
 
   TappedState = source;
+  
+  return tapped;
 }
 
 void rotateFunction() {
@@ -174,6 +201,143 @@ void animationAwake() {
     delay(100);
   }
 }
+
+void animateCycle() {
+  if (CycleUp) {
+    if (CurrentGreen < 255) {
+      CurrentGreen++;
+    } else if (CurrentRed < 255) {
+      CurrentRed++;
+    } else if (CurrentBlue < 255) {
+      CurrentBlue++;
+    } else {
+      CycleUp = false;
+    }
+  } else {
+    if (CurrentGreen > 0) {
+      CurrentGreen--;
+    } else if (CurrentRed > 0) {
+      CurrentRed--;
+    } else if (CurrentBlue > 0) {
+      CurrentBlue--;
+    } else {
+      CycleUp = true;
+    }
+  }
+  
+  for(uint16_t i = 0; i<jewel.numPixels(); i++) {
+    jewel.setPixelColor(i, jewel.Color(CurrentGreen, CurrentRed, CurrentBlue));
+  }
+  
+  jewel.show();
+  delay(50);
+}
+
+void animateBreath(rgbColor color) {
+  if (CycleUp) {
+    if (CurrentBreath < 255) {
+      CurrentBreath++;
+    } else {
+      CycleUp = false;
+    }
+  } else {
+    if (CurrentBreath > 0) {
+      CurrentBreath--;
+    } else {
+      CycleUp = true;
+    }
+  }
+  
+  for(uint16_t i = 0; i<jewel.numPixels(); i++) {
+    switch (color) {
+      case RED:
+        jewel.setPixelColor(i, jewel.Color(0, CurrentBreath, 0));
+        break;
+      case GREEN:
+        jewel.setPixelColor(i, jewel.Color(CurrentBreath, 0, 0));
+        break;
+      case BLUE:
+        jewel.setPixelColor(i, jewel.Color(0, 0, CurrentBreath));
+        break;
+    }
+  }
+  
+  jewel.show();
+  delay(20);
+}
+
+void animateRainbowLightning(){
+  for(uint16_t i = 0; i<jewel.numPixels(); i++) {
+    if (random(0,100) > 90) {
+      jewel.setPixelColor(i, jewel.ColorHSV(random(0,255), 255, 255) ); 
+    }
+    else{
+      jewel.setPixelColor(i, 0, 0, 0);
+    }
+  }
+  
+  jewel.show();
+  
+  delay(random(5,100));
+  
+  jewel.clear();
+  jewel.show();
+}
+
+void animateLightning(){
+  for(int r = 0; r<random(2,16); r++) {
+    for(uint16_t i = 0; i<jewel.numPixels(); i++) {
+      if (random(0,100) > 90) {
+        jewel.setPixelColor(i, jewel.ColorHSV(0, 0, 255));
+      }
+      else{
+        jewel.setPixelColor(i, 0, 0, 0);
+      }
+    }
+
+    if (tapDetect()) {
+      return;
+    }
+    
+    jewel.show();
+    
+    delay(random(5,100));
+    
+    jewel.clear();
+    jewel.show();
+  }
+
+  delay(random(200,800));
+}
+
+//Sucks... fix later
+void animateCracklingLightning(){
+   for(uint16_t i = 0; i<jewel.numPixels(); i++) {
+      jewel.setPixelColor(i, jewel.ColorHSV(0, 0, 255)); 
+   }
+   
+   jewel.show();
+   
+   delay(random(10,100));
+   
+   jewel.clear();
+   jewel.show();
+}
+
+void cycleHue() {
+  CurrentHue++;
+
+  if (CurrentHue > 65535) {
+    CurrentHue = 0;
+  }
+  
+  for(uint16_t i = 0; i<jewel.numPixels(); i++) {
+    jewel.setPixelColor(i, jewel.ColorHSV(CurrentHue, 255, 255)); 
+  }
+
+  jewel.show();
+}
+
 
 /*
  * FLASHLIGHTS
@@ -277,6 +441,10 @@ void lightCompass(float currPixelHeading) {
     jewel.show();
   }
 }
+
+/*
+ * UTILITIES
+ */
 
 float invertPixel(float currPixelHeading) {
   //Pole Shift
